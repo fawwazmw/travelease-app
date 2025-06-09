@@ -1,12 +1,9 @@
-// File: lib/screens/category_destination_list_screen.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-// Impor model dari folder models
-import '../models/destination.dart'; // Sesuaikan path jika struktur folder Anda berbeda
-import '../models/category.dart';   // Sesuaikan path jika struktur folder Anda berbeda
-
-// Definisi class Category dan Destination sudah dipindah ke file model masing-masing
+// Impor model dan service
+import '../models/destination.dart';
+import '../models/category.dart'; // Ini adalah AppCategory
+import '../services/api_service.dart';
 
 class CategoryDestinationListScreen extends StatefulWidget {
   final AppCategory category;
@@ -20,53 +17,68 @@ class CategoryDestinationListScreen extends StatefulWidget {
 
 class _CategoryDestinationListScreenState
     extends State<CategoryDestinationListScreen> {
+  // --- State ---
   List<Destination> _categoryDestinations = [];
+  bool _isLoading = true;
+  String? _error;
+
+  final ApiService _apiService = ApiService();
 
   @override
   void initState() {
     super.initState();
-    _loadDestinations();
+    _fetchDestinationsByCategory();
   }
 
-  void _loadDestinations() {
-    // Simulasi filter atau fetch data berdasarkan kategori
-    final allDestinations = [
-      Destination(id: '1', name: 'Kuta Beach Hotel', location: 'Bali, Indonesia', imageUrl: 'https://via.placeholder.com/150/FFC107/000000?Text=Hotel+Kuta', price: 120, rating: 4.8, discount: '30% OFF', isFavorite: false),
-      Destination(id: '2', name: 'Bromo Sunrise Lodge', location: 'East Java, Indonesia', imageUrl: 'https://via.placeholder.com/150/4CAF50/FFFFFF?Text=Lodge+Bromo', price: 250, rating: 4.9, isFavorite: true),
-      Destination(id: '3', name: 'Borobudur View Resort', location: 'Central Java, Indonesia', imageUrl: 'https://via.placeholder.com/150/2196F3/FFFFFF?Text=Resort+Borobudur', price: 180, rating: 4.7),
-      Destination(id: '4', name: 'Raja Ampat Dive Resort', location: 'West Papua, Indonesia', imageUrl: 'https://via.placeholder.com/150/00BCD4/FFFFFF?Text=Dive+Raja+Ampat', price: 500, rating: 4.9, isFavorite: false),
-      Destination(id: '5', name: 'Komodo Island Stay', location: 'NTT, Indonesia', imageUrl: 'https://via.placeholder.com/150/8BC34A/FFFFFF?Text=Stay+Komodo', price: 450, rating: 4.8),
-    ];
+  /// Fetches destinations based on the category slug using the updated ApiService.
+  Future<void> _fetchDestinationsByCategory() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
-    if (widget.category.name == "Hotels") {
-      _categoryDestinations = allDestinations.where((d) => d.name.toLowerCase().contains("hotel") || d.name.toLowerCase().contains("lodge") || d.name.toLowerCase().contains("resort") || d.name.toLowerCase().contains("stay")).toList();
-    } else if (widget.category.name == "Flights") {
-      _categoryDestinations = [];
-    } else {
-      _categoryDestinations = allDestinations.take(3).toList();
+    if (kDebugMode) {
+      print("Fetching destinations for category slug: ${widget.category.slug}");
     }
-    if(mounted){
-      setState(() {});
+
+    try {
+      // Panggil service yang kini mengembalikan Future<List<Destination>>
+      final destinations = await _apiService.getDestinations(categorySlug: widget.category.slug);
+
+      if (mounted) {
+        setState(() {
+          _categoryDestinations = destinations;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      // Tangkap exception yang dilempar oleh ApiService
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
+
+  // --- Widget Builders ---
 
   Widget _buildDestinationTile(Destination destination) {
-    // Gaya kartu ini sekarang akan mengikuti _buildDestinationCard (Featured Card)
-    // dari HomeScreen Anda
     return GestureDetector(
       onTap: () {
-        // TODO: Navigasi ke detail destinasi
-        // Pastikan menggunakan kDebugMode jika print hanya untuk debug
         if (kDebugMode) {
           print('Tapped on Category Destination: ${destination.name}');
+          // TODO: Navigasi ke detail destinasi
+          // Navigator.pushNamed(context, destinationDetailRoute, arguments: destination);
         }
       },
       child: Container(
-        // Untuk vertical list, width tidak di-set agar mengambil lebar parent
-        margin: const EdgeInsets.only(bottom: 20.0), // Jarak antar kartu, bisa disesuaikan
+        margin: const EdgeInsets.only(bottom: 20.0),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16), // Rounded corners untuk card
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: Colors.grey.withOpacity(0.1),
@@ -76,92 +88,75 @@ class _CategoryDestinationListScreenState
             ),
           ],
         ),
-        child: Column( // Layout utama adalah Column
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Stack(
               children: [
                 ClipRRect(
-                  // Menggunakan BorderRadius.all agar semua sudut gambar melengkung
-                  // Sesuai dengan _buildDestinationCard di HomeScreen Anda
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                   child: Image.network(
-                    destination.imageUrl,
-                    height: 160, // Tinggi gambar seperti featured card di HomeScreen
-                    width: double.infinity, // Gambar memenuhi lebar card
+                    destination.mainImageUrl, // <-- DIPERBARUI: Menggunakan field yang benar
+                    height: 180,
+                    width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
-                        height: 160,
+                        height: 180,
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: const BorderRadius.all(Radius.circular(16)),
                         ),
-                        child: const Icon(Icons.image_not_supported)
+                        child: const Icon(Icons.image_not_supported, color: Colors.grey)
                     ),
                   ),
                 ),
-                if (destination.discount != null)
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFC900), // Warna diskon dari HomeScreen
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        destination.discount!,
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                Positioned( // Ikon Love Tanpa Lingkaran
+                Positioned(
                   top: 8,
                   right: 8,
                   child: Material(
-                    color: Colors.transparent,
-                    child: IconButton(
-                      icon: Icon(
-                        destination.isFavorite ? Icons.favorite : Icons.favorite_border,
-                        color: destination.isFavorite ? Colors.red : Colors.grey.shade700,
-                        size: 24,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        setState(() { // setState ini akan bekerja karena _buildDestinationTile adalah method dari _CategoryDestinationListScreenState
+                    color: Colors.white.withOpacity(0.7),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () {
+                        setState(() {
                           destination.isFavorite = !destination.isFavorite;
-                          // TODO: Update status favorit di backend/database
+                          // TODO: Panggil service untuk update status favorit di backend
                         });
                       },
+                      child: Padding(
+                        padding: const EdgeInsets.all(6.0),
+                        child: Icon(
+                          destination.isFavorite ? Icons.favorite : Icons.favorite_border,
+                          color: destination.isFavorite ? Colors.red : Colors.grey.shade800,
+                          size: 22,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
             Padding(
-              padding: const EdgeInsets.all(12.0), // Padding untuk konten teks
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     destination.name,
-                    // Style disamakan dengan _buildDestinationCard di HomeScreen
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
-                      // Style ikon dan teks lokasi disamakan dengan _buildDestinationCard di HomeScreen
                       const Icon(Icons.location_on, color: Color(0xFF446DFF), size: 14),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          destination.location,
+                          destination.locationAddress ?? 'Unknown location',
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -169,25 +164,23 @@ class _CategoryDestinationListScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10), // Jarak sebelum baris harga/rating
+                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.end, // Agar /night sejajar dengan bawah harga
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            // Style harga disamakan dengan _buildDestinationCard di HomeScreen
-                            'Rp ${destination.price.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF446DFF)),
+                            'Rp${destination.ticketPrice.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF446DFF)),
                           ),
-                          Padding( // Menggunakan Padding agar ada sedikit jarak
+                          Padding(
                             padding: const EdgeInsets.only(left: 2.0),
                             child: Text(
-                              // Style /night disamakan dengan _buildDestinationCard di HomeScreen
-                              '/night',
+                              '/ticket',
                               style: TextStyle(fontSize: 12, fontWeight: FontWeight.normal, color: Colors.grey.shade600),
                             ),
                           ),
@@ -198,7 +191,7 @@ class _CategoryDestinationListScreenState
                           const Icon(Icons.star, color: Colors.amber, size: 16),
                           const SizedBox(width: 4),
                           Text(
-                            destination.rating.toString(),
+                            destination.averageRating.toString(),
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.black54),
                           ),
                         ],
@@ -210,6 +203,70 @@ class _CategoryDestinationListScreenState
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF446DFF)),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red.shade300, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red.shade700, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try Again'),
+                onPressed: _fetchDestinationsByCategory,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF446DFF),
+                  foregroundColor: Colors.white,
+                ),
+              )
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_categoryDestinations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            'No destinations found for "${widget.category.name}".\nTry exploring other categories!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 16, height: 1.5),
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchDestinationsByCategory,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+        itemCount: _categoryDestinations.length,
+        itemBuilder: (context, index) {
+          return _buildDestinationTile(_categoryDestinations[index]);
+        },
       ),
     );
   }
@@ -235,23 +292,14 @@ class _CategoryDestinationListScreenState
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.black54),
             onPressed: () {
-              print('More options for ${widget.category.name} tapped');
+              if (kDebugMode) {
+                print('More options for ${widget.category.name} tapped');
+              }
             },
           ),
         ],
       ),
-      body: _categoryDestinations.isEmpty
-          ? Center(
-        child: Text('No destinations found for ${widget.category.name}.',
-            style: TextStyle(color: Colors.grey.shade700, fontSize: 16)),
-      )
-          : ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-        itemCount: _categoryDestinations.length,
-        itemBuilder: (context, index) {
-          return _buildDestinationTile(_categoryDestinations[index]);
-        },
-      ),
+      body: _buildBody(),
     );
   }
 }

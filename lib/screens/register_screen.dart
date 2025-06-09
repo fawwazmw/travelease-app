@@ -1,7 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-// Impor AuthService dan User model jika perlu
-import '../services/auth_service.dart'; // Sesuaikan path jika perlu
+import '../services/auth_service.dart';
+import '../utils/toast_utils.dart';
 // import '../models/user.dart'; // Tidak perlu diimpor langsung di sini jika hanya passing data
 
 class RegisterScreen extends StatefulWidget {
@@ -34,20 +35,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _register() async { // Ubah menjadi async
+  Future<void> _register() async {
     if (_formKey.currentState!.validate()) {
       if (!_agreeToTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You must agree to the Terms and Conditions.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ToastUtils.showErrorToast('You must agree to the Terms and Conditions.'); // <-- Gunakan ToastUtils
         return;
       }
 
       setState(() {
-        _isLoading = true; // Mulai loading
+        _isLoading = true;
       });
 
       try {
@@ -59,59 +55,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
         );
 
         setState(() {
-          _isLoading = false; // Selesai loading
+          _isLoading = false;
         });
 
-        if (!mounted) return; // Cek jika widget masih ada di tree
+        if (!mounted) return;
 
         if (result['success'] == true) {
-          // User user = result['user'] as User; // Ambil data user jika perlu
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Registration successful! Please check your email.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // Navigasi ke halaman login setelah beberapa saat atau tampilkan dialog
+          ToastUtils.showSuccessToast(result['message'] ?? 'Registration successful! Please check your email.'); // <-- Gunakan ToastUtils
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
-              // Ganti '/login' dengan konstanta rute Anda jika ada (misal: loginRoute)
+              // Ganti '/login' dengan konstanta rute Anda jika ada (misal: loginRoute dari main.dart)
               Navigator.pushReplacementNamed(context, '/login');
             }
           });
         } else {
-          // Tampilkan error
           String errorMessage = result['message'] ?? 'Registration failed.';
           if (result['errors'] != null) {
-            // Jika ada error validasi spesifik, bisa ditampilkan
-            // Contoh: ambil error pertama
-            Map<String, dynamic> errors = result['errors'];
+            Map<String, dynamic> errors = result['errors'] as Map<String, dynamic>;
             if (errors.isNotEmpty) {
-              // Ambil pesan error dari field pertama yang error
               final firstErrorField = errors.keys.first;
-              final firstErrorMessage = (errors[firstErrorField] as List).isNotEmpty
-                  ? (errors[firstErrorField] as List)[0]
-                  : "Validation error.";
-              errorMessage = '$errorMessage ${errors.keys.first.capitalize()}: $firstErrorMessage';
+              final errorList = errors[firstErrorField];
+              if (errorList is List && errorList.isNotEmpty) {
+                final firstDetailError = errorList[0]?.toString() ?? "Unknown validation issue.";
+                String baseMessage = result['message']?.toString() ?? "Validation error.";
+                errorMessage = '$baseMessage ${firstErrorField.capitalize()}: $firstDetailError';
+              } else {
+                errorMessage = result['message']?.toString() ?? 'Validation errors occurred.';
+              }
             }
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ToastUtils.showErrorToast(errorMessage); // <-- Gunakan ToastUtils
         }
       } catch (e) {
-        setState(() {
-          _isLoading = false; // Selesai loading jika ada exception
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('An unexpected error occurred: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+          String exceptionMessage = 'An unexpected error occurred: ${e.toString()}';
+          if (kDebugMode) {
+            print(exceptionMessage);
+          }
+          ToastUtils.showErrorToast(exceptionMessage); // <-- Gunakan ToastUtils
+        }
       }
     }
   }
@@ -381,7 +366,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               recognizer: TapGestureRecognizer()
                                 ..onTap = () {
-                                  print('Terms and Conditions tapped');
+                                  if (kDebugMode) {
+                                    print('Terms and Conditions tapped');
+                                  }
                                 },
                             ),
                           ],

@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-// import 'package:shared_preferences/shared_preferences.dart'; // Akan digunakan nanti
+import 'package:flutter/foundation.dart'; // Untuk kDebugMode
+import 'package:shared_preferences/shared_preferences.dart'; // Untuk status onboarding
+import 'package:flutter_spinkit/flutter_spinkit.dart'; // <-- 1. Impor flutter_spinkit
 
-// Sebaiknya impor konstanta rute dari file pusat (main.dart atau app_routes.dart)
-// Untuk sementara, kita definisikan yang relevan di sini.
-const String onboardingRoute = '/onboarding';
-// const String loginRoute = '/login'; // Akan digunakan jika onboarding selesai
-// const String homeRoute = '/home';   // Akan digunakan jika sudah login
+// Impor service, model, dan konstanta rute Anda
+import '../services/auth_service.dart'; // Sesuaikan path jika perlu
+import '../models/user.dart';         // Sesuaikan path jika perlu
+import '../main.dart';               // Untuk konstanta rute
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,33 +17,72 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  final AuthService _authService = AuthService(); // Inisialisasi AuthService
+
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _initializeAppAndNavigate();
   }
 
-  Future<void> _initializeApp() async {
+  Future<void> _initializeAppAndNavigate() async {
     // Durasi minimal splash screen ditampilkan
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 3)); // Anda bisa sesuaikan durasi ini
 
     if (!mounted) return; // Pastikan widget masih ada di tree
 
-    // Untuk saat ini, kita asumsikan onboarding belum selesai
-    // dan langsung arahkan ke onboarding screen.
-    // bool onboardingCompleted = false; // Placeholder, nanti diambil dari SharedPreferences
+    // 1. Cek status "Remember Me" dan token
+    bool rememberMe = await _authService.getRememberMe();
+    String? token = await _authService.getToken();
 
-    // if (onboardingCompleted) {
-    //   // TODO: Cek status login jika onboarding sudah selesai
-    //   // bool isLoggedIn = false; // Placeholder, nanti diambil dari SharedPreferences atau token
-    //   // if (isLoggedIn) {
-    //   //   Navigator.pushReplacementNamed(context, homeRoute);
-    //   // } else {
-    //   //   Navigator.pushReplacementNamed(context, loginRoute);
-    //   // }
-    // } else {
-    Navigator.pushReplacementNamed(context, onboardingRoute);
-    // }
+    if (kDebugMode) {
+      print("SplashScreen: Remember Me = $rememberMe, Token = ${token != null ? 'Exists' : 'Null'}");
+    }
+
+    if (rememberMe && token != null) {
+      // 2. Jika "Remember Me" aktif dan token ada, coba validasi token dengan mengambil profil pengguna
+      if (kDebugMode) {
+        print("SplashScreen: Attempting to fetch user profile with existing token...");
+      }
+      final profileResult = await _authService.getUserProfile();
+
+      if (!mounted) return;
+
+      if (profileResult['success'] == true && profileResult['user'] != null) {
+        User user = profileResult['user'] as User;
+        if (kDebugMode) {
+          print("SplashScreen: User profile fetched successfully (${user.name}). Navigating to Home.");
+        }
+        // Langsung ke HomeScreen dengan data pengguna
+        Navigator.pushReplacementNamed(context, homeRoute, arguments: user);
+      } else {
+        // Gagal fetch profile (token mungkin expired atau tidak valid), arahkan ke Login
+        if (kDebugMode) {
+          print("SplashScreen: Failed to fetch user profile or token invalid. Message: ${profileResult['message']}. Navigating to Login.");
+        }
+        // Hapus token dan status "Remember Me" karena sesi tidak valid lagi
+        await _authService.deleteToken();
+        await _authService.clearRememberMe();
+        Navigator.pushReplacementNamed(context, loginRoute);
+      }
+    } else {
+      // 3. Jika tidak ada "Remember Me" atau tidak ada token, cek status onboarding
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      // Gunakan kunci yang konsisten untuk status onboarding, misalnya 'onboarding_completed'
+      bool onboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
+
+      if (kDebugMode) {
+        print("SplashScreen: No Remember Me/Token. Onboarding completed = $onboardingCompleted");
+      }
+
+      if (!onboardingCompleted) {
+        // Jika onboarding belum selesai, arahkan ke OnboardingScreen
+        Navigator.pushReplacementNamed(context, onboardingRoute);
+      } else {
+        // Jika onboarding sudah selesai, arahkan ke LoginScreen
+        Navigator.pushReplacementNamed(context, loginRoute);
+      }
+    }
   }
 
   @override
@@ -54,28 +94,24 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Image(
-              image: AssetImage('assets/images/logotravelease.png'), // Menggunakan AssetImage
+              image: AssetImage('assets/images/logotravelease.png'), // Pastikan path logo benar
               width: 80,
               height: 80,
-              // errorBuilder opsional jika Anda yakin path benar & gambar ada
-              // Jika ingin tetap ada fallback:
-              // errorBuilder: (context, error, stackTrace) {
-              //   return const Icon(
-              //     Icons.travel_explore,
-              //     size: 80,
-              //     color: Colors.grey,
-              //   );
-              // },
             ),
             SizedBox(height: 16),
             Text(
               "TravelEase",
               style: TextStyle(
-                // fontFamily: 'Poppins', // Tidak perlu jika sudah default di ThemeData
                 fontSize: 22,
                 fontWeight: FontWeight.w600,
                 color: Colors.black87,
               ),
+            ),
+            SizedBox(height: 32), // Jarak sebelum animasi loading
+            // --- 2. Ganti CircularProgressIndicator dengan SpinKit ---
+            SpinKitFadingCircle( // Contoh menggunakan FadingCircle
+              color: Color(0xFF446DFF), // Warna animasi
+              size: 50.0,               // Ukuran animasi
             ),
           ],
         ),

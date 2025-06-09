@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // const String resetPasswordRoute = '/reset-password'; // Akan digunakan nanti setelah kode dikirim
@@ -22,7 +23,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   void _sendCode() {
     if (_formKey.currentState!.validate()) {
       String email = _emailController.text;
-      print('Send code to email: $email');
+      if (kDebugMode) {
+        print('Send code to email: $email');
+      }
       // TODO: Panggil API untuk mengirim kode reset password
       // Setelah berhasil, mungkin navigasi ke halaman input kode verifikasi
       // Navigator.pushNamed(context, resetPasswordRoute, arguments: email);

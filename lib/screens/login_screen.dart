@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart'; // Impor AuthService
-// Impor konstanta rute Anda
-import '../main.dart'; // Asumsi konstanta rute ada di main.dart atau buat file khusus
+import '../models/user.dart';
+import '../services/auth_service.dart';
+import '../main.dart';
+import '../utils/toast_utils.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,12 +17,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
-  bool _isLoading = false; // State untuk loading
+  bool _isLoading = false;
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  final AuthService _authService = AuthService(); // Instance AuthService
+  final AuthService _authService = AuthService();
 
   @override
   void dispose() {
@@ -30,66 +31,52 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _login() async { // Ubah menjadi async
+  Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
-        _isLoading = true; // Mulai loading
+        _isLoading = true;
       });
 
       try {
         final result = await _authService.login(
           email: _emailController.text,
           password: _passwordController.text,
+          rememberMe: _rememberMe,
         );
 
         setState(() {
-          _isLoading = false; // Selesai loading
+          _isLoading = false;
         });
 
         if (!mounted) return;
 
-        if (result['success'] == true) {
-          // Login berhasil
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Login successful!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // Navigasi ke HomeScreen setelah login berhasil
-          Navigator.pushReplacementNamed(context, homeRoute); // Menggunakan konstanta homeRoute
+        if (result['success'] == true && result['user'] != null) { // <-- 2. Pastikan 'user' ada
+          ToastUtils.showSuccessToast(result['message'] ?? 'Login successful!');
+          User loggedInUser = result['user'] as User; // Ambil objek User
+          // Navigasi ke HomeScreen setelah login berhasil DAN KIRIM USER SEBAGAI ARGUMEN
+          Navigator.pushReplacementNamed(context, homeRoute, arguments: loggedInUser); // <-- 3. Kirim argumen
         } else {
-          // Tangani error login
-          String apiMessage = result['message']?.toString() ?? 'Login failed due to an unknown API error.';
-
+          String errorMessage = result['message'] ?? 'Login failed.';
           if (result['email_not_verified'] == true) {
-            apiMessage = result['message']?.toString() ?? 'Please verify your email first.';
+            errorMessage = result['message'] ?? 'Please verify your email first.';
           } else if (result['errors'] != null && result['errors'] is Map) {
             Map<String, dynamic> errors = result['errors'] as Map<String, dynamic>;
             if (errors.isNotEmpty) {
               final firstErrorField = errors.keys.first;
               final errorList = errors[firstErrorField];
               if (errorList is List && errorList.isNotEmpty) {
-                // Pastikan item dalam list juga string atau bisa di-toString()
                 final firstDetailError = errorList[0]?.toString() ?? "Unknown validation issue.";
-                apiMessage = '${result['message']?.toString() ?? "Validation error."} ${firstErrorField.capitalize()}: $firstDetailError';
+                String baseMessage = result['message']?.toString() ?? "Validation error.";
+                errorMessage = '$baseMessage ${firstErrorField.capitalize()}: $firstDetailError';
               } else {
-                apiMessage = result['message']?.toString() ?? 'Validation errors occurred.';
+                errorMessage = result['message']?.toString() ?? 'Validation errors occurred.';
               }
             }
           }
-
-          if (mounted) { // Pastikan widget masih mounted sebelum menampilkan SnackBar
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(apiMessage),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
+          ToastUtils.showErrorToast(errorMessage);
         }
       } catch (e) {
-        if (mounted) { // Pastikan widget masih mounted
+        if (mounted) {
           setState(() {
             _isLoading = false;
           });
@@ -97,12 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (kDebugMode) {
             print(exceptionMessage);
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(exceptionMessage),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ToastUtils.showErrorToast(exceptionMessage);
         }
       }
     }
@@ -133,7 +115,6 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -193,11 +174,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Color(0xFFC5C5C5)),
+                      borderSide: const BorderSide(color: Color(0xFFC5C5C5)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Color(0xFFC5C5C5)),
+                      borderSide: const BorderSide(color: Color(0xFFC5C5C5)),
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
                   ),
@@ -245,11 +226,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Color(0xFFC5C5C5)),
+                      borderSide: const BorderSide(color: Color(0xFFC5C5C5)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Color(0xFFC5C5C5)),
+                      borderSide: const BorderSide(color: Color(0xFFC5C5C5)),
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
                   ),
@@ -271,21 +252,28 @@ class _LoginScreenState extends State<LoginScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: <Widget>[
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _rememberMe,
-                            onChanged: _isLoading ? null : (bool? value) => setState(() => _rememberMe = value ?? false),
-                            activeColor: const Color(0xFF446DFF),
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Remember me',
-                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        Row(
+                          children: <Widget>[
+                            SizedBox(
+                              width: 24, height: 24,
+                              child: Checkbox(
+                                value: _rememberMe, // Gunakan state _rememberMe
+                                onChanged: _isLoading ? null : (bool? value) {
+                                  setState(() {
+                                    _rememberMe = value ?? false; // Update state _rememberMe
+                                  });
+                                },
+                                activeColor: const Color(0xFF446DFF),
+                                checkColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFFC5C5C5)),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('Remember me', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                          ],
                         ),
                       ],
                     ),
@@ -313,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF446DFF), // Warna sama seperti Get Started
+                      backgroundColor: const Color(0xFF446DFF), // Warna sama seperti Get Started
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8), // Padding internal
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
